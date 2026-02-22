@@ -98,8 +98,9 @@ SparkSDP/
 │   ├── 04_gold_tax_income_bands.sql    # Gold 2 — income band distribution
 │   └── 05_publish_rs_tax_sdp.py        # Publish Gold → rs-tax (streaming)
 ├── sample_data/
-│   ├── tax_records_2024.csv            # Sample data for LOCAL_MODE
-│   └── tax_records_incremental.csv
+│   ├── tax_records_2024_00.csv          # Base 2023–2024 sample (25 rows)
+│   ├── tax_records_incremental_1.csv    # Incremental batch 1 — 2024–2025 (13 rows)
+│   └── tax_records_incremental_2.csv    # Incremental batch 2 — 2025–2026 + amended (10 rows)
 ├── jars/                               # Connector JARs (gitignored)
 │   ├── hadoop-aws-3.4.2.jar
 │   ├── bundle-2.26.0.jar
@@ -288,8 +289,8 @@ ADLS_ACCOUNT_KEY=base64encodedkeyhere==
 # Set to "true" to use local CSV instead of S3 (offline testing)
 LOCAL_MODE=false
 
-# Local fallback path (used when LOCAL_MODE=true)
-LOCAL_SAMPLE_DATA=/Volumes/D/Projects/SparkSDP/sample_data/tax_records_2024.csv
+# Local fallback path — directory containing CSV files (used when LOCAL_MODE=true)
+LOCAL_SAMPLE_DATA=/Volumes/D/Projects/SparkSDP/sample_data/
 ```
 
 | Variable | Description |
@@ -302,7 +303,7 @@ LOCAL_SAMPLE_DATA=/Volumes/D/Projects/SparkSDP/sample_data/tax_records_2024.csv
 | `ADLS_ACCOUNT_NAME` | Azure Storage account name |
 | `ADLS_ACCOUNT_KEY` | Azure Storage account key (Base64) |
 | `LOCAL_MODE` | `true` = read local CSV, write to `./spark-warehouse` |
-| `LOCAL_SAMPLE_DATA` | Absolute path to local CSV (used when `LOCAL_MODE=true`) |
+| `LOCAL_SAMPLE_DATA` | Absolute path to local CSV directory (all CSVs are read; used when `LOCAL_MODE=true`) |
 
 ---
 
@@ -366,7 +367,7 @@ Run is COMPLETED.
 LOCAL_MODE=true ./run.sh
 ```
 
-Reads from `sample_data/tax_records_2024.csv`, writes to `./spark-warehouse` — no AWS or Azure credentials needed.
+Reads all CSV files from `sample_data/`, writes to `./spark-warehouse` — no AWS or Azure credentials needed.
 
 ### Force Full Recompute
 
@@ -516,9 +517,20 @@ con.close()
 
 ## 13. Pipeline Layers in Detail
 
+### Python vs SQL — design note
+
+Bronze and Publish layers are written in Python (`@dp.materialized_view`, `@dp.append_flow`). Silver and Gold must be SQL (`CREATE MATERIALIZED VIEW`). This is a constraint of SDP 4.1.1:
+
+- **Python flows** (`DefineFlow`) are registered by serialising the PySpark plan client-side, then sending it to the Spark Connect server. The server validates all table references against the **live Hive catalog**. Because the warehouse is wiped at pipeline startup, pipeline-registered tables don't exist in the catalog at registration time → `TABLE_OR_VIEW_NOT_FOUND`.
+- **SQL files** (`DefineSqlGraphElements`) send raw SQL text to the server, which resolves table names inside the **pipeline graph context** — pipeline-registered tables are always resolvable, regardless of the catalog.
+
+Rule of thumb: use Python for layers that read **external sources** (S3, CSV, cloud storage) or write **sinks**. Use SQL for layers that read from **other pipeline tables**.
+
+---
+
 ### Bronze — `01_bronze_tax.py`
 
-- Reads CSV from S3 (or local file in `LOCAL_MODE`)
+- Reads all CSVs from S3 (or the local `sample_data/` directory in `LOCAL_MODE`)
 - Uses `inferSchema=true`, `mode=PERMISSIVE` — malformed rows come through with nulls
 - Stamps every row with `_source_path`, `_ingested_at`, `_pipeline_run_date`
 
@@ -597,10 +609,11 @@ logs/
 metastore_db/
 spark-warehouse/
 .spark-conf-runtime/
-spark-pipeline.yml
 __pycache__/
 .venv/
 ```
+
+> `spark-pipeline.yml` is **committed** to source control — it contains ADLS account name but no credentials (those are injected at runtime via `SPARK_CONF_DIR`). The `.gitignore` intentionally does not exclude it.
 
 ---
 

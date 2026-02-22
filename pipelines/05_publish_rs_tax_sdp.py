@@ -21,7 +21,7 @@ else:
         raise ValueError("ADLS_ACCOUNT_NAME must be set for cloud mode.")
     _container = "medallion"
     _src_root = f"abfs://{_container}@{_adls_account}.dfs.core.windows.net/ldp-tax/warehouse"
-    _dst_root = f"abfs://{_container}@{_adls_account}.dfs.core.windows.net/rs-tax"
+    _dst_root = f"abfs://{_container}@{_adls_account}.dfs.core.windows.net/published-tax-data"
 
 for _t in GOLD_TABLES:
     dp.create_sink(

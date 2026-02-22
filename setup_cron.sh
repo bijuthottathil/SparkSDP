@@ -15,7 +15,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUN_SCRIPT="${SCRIPT_DIR}/run.sh"
 CRON_LOG="${SCRIPT_DIR}/logs/cron.log"
-CRON_SCHEDULE="${CRON_SCHEDULE:-25 17 * * *}"  # default: 17:16 daily
+CRON_SCHEDULE="${CRON_SCHEDULE:-55 12 * * *}"  # default: 17:16 daily
 CRON_TAG="# LDP_TAX_PIPELINE"                  # marker to find our entry
 
 # ── Ensure run.sh is executable ───────────────────────────────────────────────

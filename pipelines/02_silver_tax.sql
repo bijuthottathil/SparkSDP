@@ -13,10 +13,12 @@
 -- (e.g. original + amended return), only the row with the latest filing_date
 -- survives — the most recent filing always wins, with no history retained.
 --
--- NOTE: MERGE INTO is not supported in Spark Pipelines SQL files
--- (PIPELINE_SQL_GRAPH_ELEMENT_REGISTRATION_ERROR). True incremental SCD1
--- across runs requires restructuring bronze to a streaming source and using
--- CREATE STREAMING TABLE + APPLY CHANGES INTO.
+-- NOTE: Python @dp.materialized_view cannot reference pipeline-registered
+-- tables (e.g. bronze_tax_records). Python flows are registered via
+-- DefineFlow which validates the relation plan against the regular catalog
+-- (not the pipeline graph). SQL files use DefineSqlGraphElements which IS
+-- resolved in the pipeline context. Silver and Gold must therefore remain
+-- SQL; Bronze and Publish can be Python (they read external sources/sinks).
 -- ─────────────────────────────────────────────────────────────────────────────
 
 CREATE MATERIALIZED VIEW silver_tax_records AS
@@ -41,7 +43,12 @@ WITH typed AS (
         CAST(tax_paid            AS DOUBLE)             AS tax_paid,
         CAST(balance_due         AS DOUBLE)             AS balance_due,
         CAST(refund_amount       AS DOUBLE)             AS refund_amount,
-        TO_DATE(filing_date, 'yyyy-MM-dd')              AS filing_date,
+        -- Accept multiple date formats; unparseable dates become NULL (row excluded below)
+        COALESCE(
+            TRY_TO_DATE(filing_date, 'yyyy-MM-dd'),   -- ISO:        2025-04-14
+            TRY_TO_DATE(filing_date, 'M/d/yyyy'),     -- US short:   4/14/2025
+            TRY_TO_DATE(filing_date, 'MM/dd/yyyy')    -- US padded:  04/14/2025
+        )                                             AS filing_date,
         UPPER(TRIM(return_type))                        AS return_type,
         _ingested_at,
         _pipeline_run_date
@@ -58,6 +65,7 @@ validated AS (
     FROM typed
     WHERE
         taxpayer_id   IS NOT NULL
+        AND filing_date IS NOT NULL
         AND tax_year  BETWEEN 1990 AND 2030
         AND gross_income   >= 0
         AND taxable_income >= 0
