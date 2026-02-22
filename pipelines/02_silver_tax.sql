@@ -23,9 +23,10 @@
 
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- MODE 1 — Full Refresh  (active by default)
+-- MODE 1 — Full Refresh  (inactive — switched to Mode 2)
 -- ═════════════════════════════════════════════════════════════════════════════
 
+/*
 CREATE MATERIALIZED VIEW silver_tax_records AS
 WITH typed AS (
     SELECT
@@ -116,16 +117,11 @@ SELECT
     _pipeline_run_date,
     CURRENT_TIMESTAMP() AS _processed_at
 FROM deduped;
+*/
 
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- MODE 2 — SCD Type 1  Incremental Merge / Upsert
---
--- To activate:
---   1. Comment out the CREATE MATERIALIZED VIEW block above.
---   2. Uncomment this entire block (remove /* and */).
---   3. In run.sh step 6, remove the ADLS warehouse wipe so that the
---      silver table persists between pipeline runs.
+-- MODE 2 — SCD Type 1  Incremental Merge / Upsert  (active)
 --
 -- SCD Type 1 behaviour:
 --   • MATCHED + newer/equal filing_date  → overwrite all columns (no history)
@@ -133,7 +129,6 @@ FROM deduped;
 --   • NOT MATCHED                        → insert as new row
 -- ═════════════════════════════════════════════════════════════════════════════
 
-/*
 MERGE INTO silver_tax_records AS target
 USING (
     WITH typed AS (
@@ -262,4 +257,3 @@ WHEN MATCHED AND source.filing_date >= target.filing_date THEN
 -- ── New (taxpayer_id, tax_year) not yet in silver — insert ───────────────────
 WHEN NOT MATCHED THEN
     INSERT *;
-*/
