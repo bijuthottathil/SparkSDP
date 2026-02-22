@@ -2,7 +2,6 @@
 .env
 
 # ── Generated at runtime by run.sh ────────────────────────────────────────────
-spark-pipeline.yml
 .spark-conf-runtime/
 
 # ── Spark local state ─────────────────────────────────────────────────────────

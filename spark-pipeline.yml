@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# LDP Tax Pipeline — SDP Spec Template
+# run.sh uses Python envsubst to produce spark-pipeline.yml at runtime.
+# Placeholders: ${VAR_NAME} are replaced with environment variable values.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: ldp_tax_pipeline
+
+libraries:
+  - glob:
+      include: pipelines/**
+
+# SDP checkpoint location — ADLS Gen2 in cloud mode, local in LOCAL_MODE
+storage: abfs://medallion@mytaxdatalake.dfs.core.windows.net/ldp-tax/checkpoints
+
+configuration:
+  spark.sql.shuffle.partitions: "4"
+  spark.sql.adaptive.enabled: "true"
+  spark.sql.adaptive.coalescePartitions.enabled: "true"
+
+  # NOTE: All credentials and warehouse.dir are injected via
+  # SPARK_CONF_DIR/spark-defaults.conf in run.sh — they must be available
+  # before the Spark Connect JVM starts, not here.
