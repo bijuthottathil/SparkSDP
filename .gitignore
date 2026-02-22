@@ -1,0 +1,30 @@
+# ── Credentials ───────────────────────────────────────────────────────────────
+.env
+
+# ── Generated at runtime by run.sh ────────────────────────────────────────────
+spark-pipeline.yml
+.spark-conf-runtime/
+
+# ── Spark local state ─────────────────────────────────────────────────────────
+metastore_db/
+spark-warehouse/
+derby.log
+
+# ── Connector JARs (download_jars.sh fetches these) ──────────────────────────
+jars/
+
+# ── Pipeline logs ─────────────────────────────────────────────────────────────
+logs/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
+.DS_Store
