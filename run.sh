@@ -152,58 +152,60 @@ if [ "$LOCAL_MODE" = "true" ]; then
     echo "[INFO] LOCAL_MODE — cleaning spark-warehouse and metastore_db..."
     rm -rf "${SCRIPT_DIR}/spark-warehouse" "${SCRIPT_DIR}/metastore_db"
 else
-    # Cloud mode: silver layer uses SCD Type 1 MERGE — warehouse is preserved
-    # between runs so incremental upserts accumulate correctly.
-    # Only the local metastore_db is wiped (it is rebuilt from ADLS on startup).
-    echo "[INFO] CLOUD MODE — wiping metastore_db only (warehouse preserved for SCD1)..."
+    # Cloud mode: wipe metastore_db + ADLS warehouse before every run.
+    # Bronze/Gold are full-refresh materialized views — a clean slate is required.
+    # Silver uses SCD1 MERGE in Python (02_silver_tax.py) and handles its own
+    # incremental logic; the framework re-creates it from the warehouse on startup.
+    echo "[INFO] CLOUD MODE — wiping metastore_db and ADLS warehouse..."
     rm -rf "${SCRIPT_DIR}/metastore_db"
 
-    # NOTE: ADLS warehouse wipe disabled — silver_tax_records uses MERGE INTO
-    # (SCD Type 1). To re-enable full-refresh mode, uncomment the block below
-    # and switch 02_silver_tax.sql back to MODE 1.
-    #
-    # python3 - <<'PY'
-    # import base64, hashlib, hmac, os, re, sys
-    # from datetime import datetime, timezone
-    # from urllib.request import urlopen, Request
-    # from urllib.error import HTTPError
-    #
-    # account   = os.environ["ADLS_ACCOUNT_NAME"]
-    # key_b64   = os.environ["ADLS_ACCOUNT_KEY"]
-    # warehouse = os.environ["LDP_WAREHOUSE_PATH"]
-    #
-    # m = re.match(r"abfs://([^@]+)@[^/]+/(.+)", warehouse)
-    # if not m:
-    #     print(f"[WARN] Cannot parse warehouse path: {warehouse}", file=sys.stderr)
-    #     sys.exit(0)
-    # filesystem, path = m.group(1), m.group(2)
-    #
-    # date_str = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-    # version  = "2020-02-10"
-    # canonicalized_headers  = f"x-ms-date:{date_str}\nx-ms-version:{version}\n"
-    # canonicalized_resource = f"/{account}/{filesystem}/{path}\nrecursive:true"
-    # string_to_sign = (
-    #     "DELETE\n\n\n\n\n\n\n\n\n\n\n\n"
-    #     + canonicalized_headers
-    #     + canonicalized_resource
-    # )
-    # sig = base64.b64encode(
-    #     hmac.new(base64.b64decode(key_b64), string_to_sign.encode(), hashlib.sha256).digest()
-    # ).decode()
-    # url = f"https://{account}.dfs.core.windows.net/{filesystem}/{path}?recursive=true"
-    # req = Request(url, method="DELETE")
-    # req.add_header("x-ms-date",     date_str)
-    # req.add_header("x-ms-version",  version)
-    # req.add_header("Authorization", f"SharedKey {account}:{sig}")
-    # try:
-    #     urlopen(req)
-    #     print(f"[INFO] Cleared ADLS warehouse: {warehouse}")
-    # except HTTPError as e:
-    #     if e.code == 404:
-    #         print("[INFO] ADLS warehouse path does not exist — starting fresh.")
-    #     else:
-    #         print(f"[WARN] Azure DELETE returned {e.code}: {e.read().decode()}", file=sys.stderr)
-    # PY
+    # Delete ADLS warehouse directory via Azure REST API (Python stdlib only —
+    # no PySpark session, no external tools, no extra packages needed).
+    python3 - <<'PY'
+import base64, hashlib, hmac, os, re, sys
+from datetime import datetime, timezone
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError
+
+account   = os.environ["ADLS_ACCOUNT_NAME"]
+key_b64   = os.environ["ADLS_ACCOUNT_KEY"]
+warehouse = os.environ["LDP_WAREHOUSE_PATH"]
+
+m = re.match(r"abfs://([^@]+)@[^/]+/(.+)", warehouse)
+if not m:
+    print(f"[WARN] Cannot parse warehouse path: {warehouse}", file=sys.stderr)
+    sys.exit(0)
+filesystem, path = m.group(1), m.group(2)
+
+date_str = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+version  = "2020-02-10"
+
+canonicalized_headers  = f"x-ms-date:{date_str}\nx-ms-version:{version}\n"
+canonicalized_resource = f"/{account}/{filesystem}/{path}\nrecursive:true"
+string_to_sign = (
+    "DELETE\n\n\n\n\n\n\n\n\n\n\n\n"
+    + canonicalized_headers
+    + canonicalized_resource
+)
+sig = base64.b64encode(
+    hmac.new(base64.b64decode(key_b64), string_to_sign.encode(), hashlib.sha256).digest()
+).decode()
+
+url = f"https://{account}.dfs.core.windows.net/{filesystem}/{path}?recursive=true"
+req = Request(url, method="DELETE")
+req.add_header("x-ms-date",     date_str)
+req.add_header("x-ms-version",  version)
+req.add_header("Authorization", f"SharedKey {account}:{sig}")
+
+try:
+    urlopen(req)
+    print(f"[INFO] Cleared ADLS warehouse: {warehouse}")
+except HTTPError as e:
+    if e.code == 404:
+        print("[INFO] ADLS warehouse path does not exist — starting fresh.")
+    else:
+        print(f"[WARN] Azure DELETE returned {e.code}: {e.read().decode()}", file=sys.stderr)
+PY
 fi
 
 # ── 7. Logging setup ──────────────────────────────────────────────────────────
