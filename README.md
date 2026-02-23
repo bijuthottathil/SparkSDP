@@ -1,4 +1,6 @@
 # LDP Tax Pipeline — Spark Declarative Pipelines on macOS
+<img width="1494" height="1008" alt="image" src="https://github.com/user-attachments/assets/175730a0-0354-49a0-a7cd-75a0b7904f27" />
+
 
 A production-style **Medallion Architecture** data pipeline built with **Apache Spark 4.1 Declarative Pipelines (SDP)**, reading raw tax records from **AWS S3**, processing them through Bronze → Silver → Gold layers, persisting results to **Azure Data Lake Storage Gen2**, and publishing Gold tables to a downstream reporting store — all scheduled via cron.
 
